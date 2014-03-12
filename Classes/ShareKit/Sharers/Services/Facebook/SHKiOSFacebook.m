@@ -11,14 +11,9 @@
 
 #import "SharersCommonHeaders.h"
 #import "SHKFacebookCommon.h"
-#import "SHKSession.h"
-
 #import "NSMutableDictionary+NSNullsToEmptyStrings.h"
-#import "NSMutableURLRequest+Parameters.h"
 
 #import <Accounts/Accounts.h>
-
-typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlResponse, NSError *error);
 
 @implementation SHKiOSFacebook
 
@@ -196,17 +191,9 @@ typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlRespon
                                             requestMethod:SLRequestMethodPOST
                                                       URL:[NSURL URLWithString:kSHKFacebookAPIVideosURL]
                                                parameters:params];
+    [request addMultipartData:self.item.file.data withName:@"source" type:self.item.file.mimeType filename:self.item.file.filename];
     request.account = [self availableAccounts][0];
-    
-    BOOL canUseNSURLSession = NSClassFromString(@"NSURLSession") != nil;
-    if (canUseNSURLSession) {
-        NSURLRequest *preparedRequest = [request preparedURLRequest];
-        [(NSMutableURLRequest *)preparedRequest attachFile:self.item.file withParameterName:@"source"];
-        self.networkSession = [SHKSession startSessionWithRequest:preparedRequest delegate:self completion:[self requestHandler]];
-    } else {
-        [request addMultipartData:self.item.file.data withName:@"source" type:self.item.file.mimeType filename:self.item.file.filename];
-        [request performRequestWithHandler:[self requestHandler]];
-    }
+    [request performRequestWithHandler:[self requestHandler]];
     
     //update video limits
     [[self class] getUserInfo];
@@ -231,9 +218,9 @@ typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlRespon
     [videoLimitsRequest performRequestWithHandler:[self requestHandler]];
 }
 
-- (SHKRequestHandler)requestHandler {
+- (SLRequestHandler)requestHandler {
     
-    SHKRequestHandler result = ^(NSData *responseData, NSURLResponse *urlResponse, NSError *error) {
+    SLRequestHandler result = ^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
         
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
             
@@ -242,7 +229,7 @@ typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlRespon
                 NSError *parseError;
                 NSMutableDictionary *parsedResponse = [NSJSONSerialization JSONObjectWithData:responseData options:NSJSONReadingMutableContainers error:&parseError];
                 
-                BOOL requestSucceeded = [(NSHTTPURLResponse *)urlResponse statusCode] < 400;
+                BOOL requestSucceeded = urlResponse.statusCode < 400;
                 if (requestSucceeded) {
                     
                     //if this is userinfo, save it
@@ -257,8 +244,8 @@ typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlRespon
                         [[NSUserDefaults standardUserDefaults] setObject:parsedResponse forKey:kSHKFacebookVideoUploadLimits];
                         SHKLog(@"saved Facebook Video limits");
                     }
-                    
-                    [self sendDidFinish];
+                    NSDictionary *responseResult = @{@"id":[parsedResponse objectForKey:@"id"]};
+                    [self sendDidFinishWithResponse:responseResult];
                     
                 } else {
                     
@@ -267,7 +254,7 @@ typedef void (^SHKRequestHandler)(NSData *responseData, NSURLResponse *urlRespon
                     NSUInteger errorCode = [parsedResponse[@"error"][@"code"] integerValue];
                     
                     //even for 458 (user removed app on Facebook) we should refresh token - this way iOS settings app removes access too. Then we can reauthorize again, if user shares.
-                    if (errorSubCode == 458 || errorSubCode == 463 || errorSubCode == 467 || errorCode == 2500 || 200 >= errorCode || errorCode <= 299 || errorCode == 102) {
+                    if (errorSubCode == 458 || errorSubCode == 463 || errorSubCode == 467 || errorCode == 2500 || 200 <= errorCode || errorCode <= 299) {
                         [self shouldReloginWithPendingAction:SHKPendingRefreshToken];
                     } else {
                         [self sendShowSimpleErrorAlert];

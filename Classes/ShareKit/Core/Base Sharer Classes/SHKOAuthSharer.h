@@ -30,6 +30,23 @@
 #import "OAuthConsumer.h"
 
 @interface SHKOAuthSharer : SHKSharer
+{
+	NSString *consumerKey;
+	NSString *secretKey;
+	NSURL *authorizeCallbackURL;
+	
+	NSURL *authorizeURL;
+	NSURL *accessURL;
+	NSURL *requestURL;
+	
+	OAConsumer *consumer;
+	OAToken *requestToken;
+	OAToken *accessToken;
+	
+	id<OASignatureProviding> signatureProvider;
+	
+	NSDictionary *authorizeResponseQueryVars;
+}
 
 @property (nonatomic, strong) NSString *consumerKey;
 @property (nonatomic, strong) NSString *secretKey;
@@ -46,6 +63,8 @@
 @property (strong) id<OASignatureProviding> signatureProvider;
 
 @property (nonatomic, strong) NSDictionary *authorizeResponseQueryVars;
+
+
 
 #pragma mark -
 #pragma mark OAuth Authorization
@@ -66,5 +85,6 @@
 - (void)storeAccessToken;
 - (BOOL)restoreAccessToken;
 - (void)refreshToken;
+
 
 @end

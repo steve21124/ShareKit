@@ -8,8 +8,6 @@
 
 #import "SHKFormFieldLargeTextSettings.h"
 
-#import "UIImage+OurBundle.h"
-
 @interface SHKFormFieldLargeTextSettings ()
 
 /// Shared item. Cell might display its properties, such as image, file etc.
@@ -36,11 +34,7 @@
 
 - (UIImage *)imageForThumbnail {
     
-    if (self.item.image) {
-        return self.item.image;
-    } else {
-        return [UIImage imageNamedFromOurBundle:@"DETweetURLAttachment.png"];
-    }
+    return self.item.image;
 }
 
 - (NSString *)extensionForThumbnail {

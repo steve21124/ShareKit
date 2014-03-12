@@ -23,16 +23,10 @@
 
 #import "SHKiOSTwitter.h"
 #import "SHKiOSSharer_Protected.h"
-
 #import "SharersCommonHeaders.h"
 #import "SHKTwitterCommon.h"
 #import "SHKXMLResponseParser.h"
 #import "SHKRequest.h"
-#import "SHKSession.h"
-
-#import "NSMutableURLRequest+Parameters.h"
-
-typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlResponse, NSError *error);
 
 @implementation SHKiOSTwitter
 
@@ -159,14 +153,21 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
                                                                          tagPrefix:@"#" tagSuffix:nil]];
     }
     
-    if (self.item.image || self.item.file) {
-
-        if (self.item.image && !self.item.file) {
-            [self.item convertImageShareToFileShareOfType:SHKImageConversionTypeJPG quality:1];
+    if (self.item.image) {
+    
+        NSData *imageData = nil;
+        BOOL sendViaTwitter = [SHKTwitterCommon canTwitterAcceptImage:self.item.image convertedData:&imageData];
+        
+        if (sendViaTwitter) {
+            [self sendStatusViaTwitter:imageData mimeType:@"image/jpeg" filename:@"upload.jpg"];
+        } else {
+            [self sendDataViaYFrog:imageData mimeType:@"image/jpeg" filename:@"upload.jpg"];
         }
         
+    } else if (self.item.file) {
+        
         if ([SHKTwitterCommon canTwitterAcceptFile:self.item.file]) {
-            [self sendStatusViaTwitter:self.item.file];
+            [self sendStatusViaTwitter:self.item.file.data mimeType:self.item.file.mimeType filename:self.item.file.filename];
         } else {
             [self sendDataViaYFrog:self.item.file.data mimeType:self.item.file.mimeType filename:self.item.file.filename];
         }
@@ -175,17 +176,17 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
         self.quiet = YES;
         [self fetchUserInfo];
     } else {
-        [self sendStatusViaTwitter:nil];
+        [self sendStatusViaTwitter:nil mimeType:nil filename:nil];
     }
 
     [self sendDidStart];
     return YES;
 }
 
-- (void)sendStatusViaTwitter:(SHKFile *)file {
+- (void)sendStatusViaTwitter:(NSData *)data mimeType:(NSString *)mimeType filename:(NSString *)filename {
     
     NSURL *url;
-    if (file) {
+    if (data) {
         url = [NSURL URLWithString:SHKTwitterAPIUpdateWithMediaURL];
     } else {
         url = [NSURL URLWithString:SHKTwitterAPIUpdateURL];
@@ -197,35 +198,21 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
                                                       URL:url
                                                parameters:params];
     
-    if (file) [request addMultipartData:file.data withName:@"media" type:file.mimeType filename:file.filename];
-    request.account = [self selectedAccount];
+    if (data) [request addMultipartData:data withName:@"media" type:mimeType filename:filename];
     
-    BOOL canUseNSURLSession = NSClassFromString(@"NSURLSession") != nil;
-    if (file && canUseNSURLSession) {
-        NSURLRequest *preparedRequest = [request preparedURLRequest];
-        self.networkSession = [SHKSession startSessionWithRequest:preparedRequest delegate:self completion:[self twitterDataStatusRequestHandler]];
-    } else {
-        [request performRequestWithHandler:[self twitterDataStatusRequestHandler]];
-    }
-}
-
-- (SHKRequestHandlerBlock)twitterDataStatusRequestHandler {
+        request.account = [self selectedAccount];
     
-    SHKRequestHandlerBlock result = ^(NSData *responseData, NSURLResponse *urlResponse, NSError *error) {
+    [request performRequestWithHandler:^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
         
         if (error) {
             
-            if (error.code == -999) {
-                [self sendDidCancel];
-            } else {
-                dispatch_async(dispatch_get_main_queue(), ^ {
-                    [self sendDidFailWithError:error];
-                });
-            }
+            dispatch_async(dispatch_get_main_queue(), ^ {
+                [self sendDidFailWithError:error];
+            });
             
         } else {
             
-            BOOL requestDidSucceed = [(NSHTTPURLResponse *)urlResponse statusCode] < 400;
+            BOOL requestDidSucceed = urlResponse.statusCode < 400;
             if (requestDidSucceed) {
                 
                 dispatch_async(dispatch_get_main_queue(), ^ {
@@ -235,7 +222,7 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
                 
             } else {
                 
-                if (SHKDebugShowLogs) SHKLog(@"Twitter Send Status Error: %@", [[NSString alloc] initWithData:responseData encoding:NSUTF8StringEncoding]);
+                if (SHKDebugShowLogs) SHKLog(@"Twitter Send Status Error: %@", [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
                 
                 NSMutableDictionary *parsedResponse = [NSJSONSerialization JSONObjectWithData:responseData options:NSJSONReadingMutableContainers error:nil];
                 NSDictionary *twitterError = parsedResponse[@"errors"][0];
@@ -246,49 +233,28 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
                 });
             }
         }
-    };
-    return result;
+    }];
 }
 
 - (void)sendDataViaYFrog:(NSData *)data mimeType:(NSString *)mimeType filename:(NSString *)filename {
     
-    BOOL canUseNSURLSession = NSClassFromString(@"NSURLSession") != nil;
-    if (canUseNSURLSession) {
-        
-        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[[NSURL alloc] initWithString:@"https://yfrog.com/api/xauth_upload"]];
-        [request setHTTPMethod:@"POST"];
-        request.allHTTPHeaderFields = @{@"X-Auth-Service-Provider": @"https://api.twitter.com/1.1/account/verify_credentials.json",
-                                        @"X-Verify-Credentials-Authorization": [self authorizationYFrogHeader]};
-        
-        //encountered 411 length required, thus not attachFile:withParameterName
-        [request attachFileWithParameterName:@"media" filename:filename contentType:mimeType data:data];
-        self.networkSession = [SHKSession startSessionWithRequest:request delegate:self completion:[self yFrogRequestCompletion]];
-        
-    } else {
-        
-        SLRequest *yFrogUploadRequest = [SLRequest requestForServiceType:SLServiceTypeTwitter
-                                                           requestMethod:SLRequestMethodPOST
-                                                                     URL:[[NSURL alloc] initWithString:@"https://yfrog.com/api/xauth_upload"]
-                                                              parameters:@{@"X-Auth-Service-Provider": @"https://api.twitter.com/1.1/account/verify_credentials.json",
-                                                                           @"X-Verify-Credentials-Authorization": [self authorizationYFrogHeader]}];
-        [yFrogUploadRequest addMultipartData:data withName:@"media" type:mimeType filename:filename];
-        [yFrogUploadRequest performRequestWithHandler:[self yFrogRequestCompletion]];
-    }
-}
-
-- (SHKRequestHandlerBlock)yFrogRequestCompletion {
-    
-    SHKRequestHandlerBlock result = ^(NSData *responseData, NSURLResponse *urlResponse, NSError *error) {
+    SLRequest *yFrogUploadRequest = [SLRequest requestForServiceType:SLServiceTypeTwitter
+                                                       requestMethod:SLRequestMethodPOST
+                                                                 URL:[[NSURL alloc] initWithString:@"https://yfrog.com/api/xauth_upload"]
+                                                          parameters:@{@"X-Auth-Service-Provider": @"https://api.twitter.com/1.1/account/verify_credentials.json",
+                                                                       @"X-Verify-Credentials-Authorization": [self authorizationYFrogHeader]}];
+    [yFrogUploadRequest addMultipartData:data withName:@"media" type:mimeType filename:filename];
+    [yFrogUploadRequest performRequestWithHandler:^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
         
         if (!error) {
             
-            if ([(NSHTTPURLResponse *)urlResponse statusCode] < 400) {
+            if (urlResponse.statusCode < 400) {
                 
                 NSString *mediaURL = [SHKXMLResponseParser getValueForElement:@"mediaurl" fromXMLData:responseData];
                 if (mediaURL) {
                     
                     [self.item setCustomValue:[NSString stringWithFormat:@"%@ %@", [self.item customValueForKey:@"status"], mediaURL] forKey:@"status"];
-                    [self sendStatusViaTwitter:nil];
+                    [self sendStatusViaTwitter:nil mimeType:nil filename:nil];
                     
                 } else {
                     
@@ -299,17 +265,12 @@ typedef void (^SHKRequestHandlerBlock)(NSData *responseData, NSURLResponse *urlR
                 
                 [self sendShowSimpleErrorAlert];
             }
-            
+        
         } else {
             
-            if (error.code == -999) {
-                [self sendDidCancel];
-            } else {
-                [self sendDidFailWithError:error];
-            }
+            [self sendDidFailWithError:error];
         }
-    };
-    return result;
+    }];
 }
 
 - (void)fetchUserInfo {

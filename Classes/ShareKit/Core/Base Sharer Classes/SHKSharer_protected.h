@@ -27,7 +27,6 @@
 #import "SHKItem.h"
 
 @class SHKUploadInfo;
-@class SHKSession;
 
 typedef enum
 {
@@ -37,6 +36,7 @@ typedef enum
     SHKPendingSend, //when ShareKit detects invalid credentials AFTER user sends. Item is resent without showing edit dialogue (user edited already).
 } SHKSharerPendingAction;
 
+@class SHKRequest;
 @class SHKFormController;
 @class SHKFormOptionController;
 @class SHKFile;
@@ -50,9 +50,7 @@ typedef enum
 
 ///Sharers, which are able to report upload progress (usually large file sharers, such as Dropbox or YouTube) store upload info statistics here.
 @property (nonatomic, strong) SHKUploadInfo *uploadInfo;
-
-///NSURLSession wrapper reference.
-@property (nonatomic, strong) SHKSession *networkSession;
+//@property (nonatomic) BOOL uploadProgressAvailable;
 
 //readonly public properties
 @property (nonatomic, strong) NSError *lastError;
@@ -128,6 +126,7 @@ typedef enum
 - (void)hideActivityIndicator;
 - (void)displayActivity:(NSString *)activityDescription;
 - (void)displayCompleted:(NSString *)completionText;
+- (void)showProgress:(CGFloat)progress;
 
 #pragma mark -
 #pragma mark Share Form

@@ -116,8 +116,10 @@
 
     UIImage *result = nil;
     switch (self.settings.shareType) {
-        case SHKShareTypeImage:
         case SHKShareTypeURL:
+            result = [UIImage imageNamedFromOurBundle:@"DETweetURLAttachment.png"];
+            break;
+        case SHKShareTypeImage:
             result = [self.settings imageForThumbnail];
             break;
         case SHKShareTypeFile:

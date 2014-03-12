@@ -172,17 +172,14 @@
     
     if (self.quiet) return;
     
-    dispatch_async(dispatch_get_main_queue(), ^ {
-        
-        NSString *alertTitle = SHKLocalizedString(@"No %@ Accounts", [[self class] sharerTitle]);
-        NSString *alertMessage = SHKLocalizedString(@"There are no %@ accounts configured. You can add or create a %@ account in Settings.", [[self class] sharerTitle], [[self class] sharerTitle]);
-        UIAlertView *alert = [[UIAlertView alloc] initWithTitle:alertTitle
-                                                        message:alertMessage
-                                                       delegate:nil
-                                              cancelButtonTitle:SHKLocalizedString(@"Cancel")
-                                              otherButtonTitles:nil];
-        [alert show];
-    });
+    NSString *alertTitle = SHKLocalizedString(@"No %@ Accounts", [[self class] sharerTitle]);
+    NSString *alertMessage = SHKLocalizedString(@"There are no %@ accounts configured. You can add or create a %@ account in Settings.", [[self class] sharerTitle], [[self class] sharerTitle]);
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:alertTitle
+                                                    message:alertMessage
+                                                   delegate:nil
+                                          cancelButtonTitle:SHKLocalizedString(@"Cancel")
+                                          otherButtonTitles:nil];
+    [alert show];
 }
 
 #pragma mark - MISC

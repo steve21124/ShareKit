@@ -30,7 +30,18 @@
 #import "NSHTTPCookieStorage+DeleteForURL.h"
 #import "SharersCommonHeaders.h"
 
+
 @implementation SHKOAuthSharer
+
+@synthesize consumerKey, secretKey, authorizeCallbackURL;
+@synthesize authorizeURL, requestURL, accessURL;
+@synthesize consumer, requestToken, accessToken;
+@synthesize signatureProvider;
+@synthesize authorizeResponseQueryVars;
+
+
+
+
 
 #pragma mark -
 #pragma mark Authorization
@@ -52,11 +63,11 @@
 {
 	[self displayActivity:SHKLocalizedString(@"Connecting...")];
 	
-    OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:self.requestURL
-                                                                   consumer:self.consumer
+    OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:requestURL
+                                                                   consumer:consumer
                                                                       token:nil   // we don't have a Token yet
                                                                       realm:nil   // our service provider doesn't specify a realm
-														   signatureProvider:self.signatureProvider];
+														   signatureProvider:signatureProvider];
 																
 	
 	[oRequest setHTTPMethod:@"POST"];
@@ -113,7 +124,7 @@
 
 - (void)tokenAuthorize
 {	
-	NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@?oauth_token=%@", [self.authorizeURL absoluteString], self.requestToken.key]];
+	NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@?oauth_token=%@", authorizeURL.absoluteString, requestToken.key]];
 	
 	SHKOAuthView *auth = [[SHKOAuthView alloc] initWithURL:url delegate:self];
 	[[SHK currentHelper] showViewController:auth];	
@@ -173,11 +184,11 @@
 	if (!refresh)
 		[self displayActivity:SHKLocalizedString(@"Authenticating...")];
 	
-    OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:self.accessURL
-                                                                   consumer:self.consumer
-																	   token:(refresh ? self.accessToken : self.requestToken)
+    OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:accessURL
+                                                                   consumer:consumer
+																	   token:(refresh ? accessToken : requestToken)
                                                                       realm:nil   // our service provider doesn't specify a realm
-                                                          signatureProvider:self.signatureProvider]; // use the default method, HMAC-SHA1
+                                                          signatureProvider:signatureProvider]; // use the default method, HMAC-SHA1
 	
     [oRequest setHTTPMethod:@"POST"];
 	
@@ -235,15 +246,15 @@
 
 - (void)storeAccessToken
 {	
-	[SHK setAuthValue:self.accessToken.key
+	[SHK setAuthValue:accessToken.key
 					 forKey:@"accessKey"
 				  forSharer:[self sharerId]];
 	
-	[SHK setAuthValue:self.accessToken.secret
+	[SHK setAuthValue:accessToken.secret
 					 forKey:@"accessSecret"
 			forSharer:[self sharerId]];
 	
-	[SHK setAuthValue:self.accessToken.sessionHandle
+	[SHK setAuthValue:accessToken.sessionHandle
 			   forKey:@"sessionHandle"
 			forSharer:[self sharerId]];
 }
@@ -272,9 +283,9 @@
 
 - (BOOL)restoreAccessToken
 {
-	self.consumer = [[OAConsumer alloc] initWithKey:self.consumerKey secret:self.secretKey];
+	self.consumer = [[OAConsumer alloc] initWithKey:consumerKey secret:secretKey];
 	
-	if (self.accessToken != nil)
+	if (accessToken != nil)
 		return YES;
 		
 	NSString *key = [SHK getAuthValueForKey:@"accessKey"
@@ -291,9 +302,9 @@
 		self.accessToken = [[OAToken alloc] initWithKey:key secret:secret];
 		
 		if (sessionHandle != nil)
-			self.accessToken.sessionHandle = sessionHandle;
+			accessToken.sessionHandle = sessionHandle;
 		
-		return self.accessToken != nil;
+		return accessToken != nil;
 	}
 	
 	return NO;

@@ -228,17 +228,6 @@ static NSString *const kSHKDropboxDestinationDirKeyName = @"kSHKDropboxDestinati
     }
 }
 
-#pragma mark - Share
-
-- (void)share {
-    
-    if (self.item.shareType == SHKShareTypeImage && !self.item.file) {
-        [self.item convertImageShareToFileShareOfType:SHKImageConversionTypePNG quality:0];
-    }
-    
-    [super share];
-}
-
 #pragma mark - UI
 
 - (NSArray *)shareFormFieldsForType:(SHKShareType)type {
@@ -400,6 +389,11 @@ static NSString *const kSHKDropboxDestinationDirKeyName = @"kSHKDropboxDestinati
 
 - (BOOL)send
 {
+	if (self.item.shareType == SHKShareTypeImage) {
+        
+        [self.item convertImageShareToFileShareOfType:SHKImageConversionTypePNG quality:0];
+    }
+    
     if (![self validateItem]) return NO;
 
     if (self.item.shareType == SHKShareTypeFile) {
@@ -562,9 +556,7 @@ static int outstandingRequests = 0;
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     [[NSNotificationCenter defaultCenter] postNotificationName:kSHKDropboxUploadProgress object:[NSNumber numberWithFloat:progress]];
 #pragma clang diagnostic pop
-
-    int64_t uploadedBytes = self.item.file.size * progress;
-    [self showUploadedBytes:uploadedBytes totalBytes:self.item.file.size];
+    [self showProgress:progress];
 }
 
 - (void)restClient:(DBRestClient*)client uploadFileFailedWithError:(NSError*)error {
@@ -603,8 +595,9 @@ static int outstandingRequests = 0;
     
     unsigned long long chunkUploadedBytes = kSHKDropboxSizeChunks * progress;
     unsigned long long totalUploadedBytes = chunkUploadedBytes + offset;
+    float totalProgress = (float)totalUploadedBytes/__fileSize;
     //SHKLog(@"%@ upload chunk progress = %.2f %", [client description], progress);
-    [self showUploadedBytes:totalUploadedBytes totalBytes:__fileSize];
+    [self showProgress:totalProgress];
 }
 
 - (void)restClient:(DBRestClient *)client uploadFileChunkFailedWithError:(NSError *)error {

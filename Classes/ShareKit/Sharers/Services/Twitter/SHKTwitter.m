@@ -109,8 +109,8 @@
     if (isConfigOld || !lastFetchDate) {
         
             OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:SHKTwitterAPIConfigurationURL]
-                                                                            consumer:self.consumer
-                                                                               token:self.accessToken
+                                                                            consumer:consumer
+                                                                               token:accessToken
                                                                                realm:nil
                                                                    signatureProvider:nil];
             [oRequest setHTTPMethod:@"GET"];
@@ -221,10 +221,10 @@
 	} else {
         if (self.pendingAction == SHKPendingRefreshToken)
         {
-            if (self.accessToken.sessionHandle != nil)
-                [oRequest setOAuthParameterName:@"oauth_session_handle" withValue:self.accessToken.sessionHandle];
-        } else if([self.authorizeResponseQueryVars objectForKey:@"oauth_verifier"]) {
-            [oRequest setOAuthParameterName:@"oauth_verifier" withValue:[self.authorizeResponseQueryVars objectForKey:@"oauth_verifier"]];
+            if (accessToken.sessionHandle != nil)
+                [oRequest setOAuthParameterName:@"oauth_session_handle" withValue:accessToken.sessionHandle];
+        } else if([authorizeResponseQueryVars objectForKey:@"oauth_verifier"]) {
+            [oRequest setOAuthParameterName:@"oauth_verifier" withValue:[authorizeResponseQueryVars objectForKey:@"oauth_verifier"]];
         }
     }
 }
@@ -305,16 +305,21 @@
 	
 	if (![self validateItem]) return NO;
     
-    if (self.item.image || self.item.file) {
+    if (self.item.image) {
         
-        if (self.item.image && !self.item.file) {
-            [self.item convertImageShareToFileShareOfType:SHKImageConversionTypeJPG quality:1];
+        NSData *imageData = nil;
+        if ([SHKTwitterCommon canTwitterAcceptImage:self.item.image convertedData:&imageData]) {
+            [self sendDataViaTwitter:imageData mimeType:@"image/jpeg" filename:@"upload.jpg"];
+        } else {
+            [self sendDataViaYFrog:imageData mimeType:@"image/jpeg" filename:@"upload.jpg"];
         }
+
+    } else if (self.item.file) {
         
         if ([SHKTwitterCommon canTwitterAcceptFile:self.item.file]) {
-            [self sendFileViaTwitter:self.item.file];
+            [self sendDataViaTwitter:self.item.file.data mimeType:self.item.file.mimeType filename:self.item.file.filename];
         } else {
-            [self sendFileViaYFrog:self.item.file];
+            [self sendDataViaYFrog:self.item.file.data mimeType:self.item.file.mimeType filename:self.item.file.filename];
         }
         
     } else if (self.item.shareType == SHKShareTypeUserInfo) {
@@ -333,8 +338,8 @@
 - (void)sendUserInfo {
 	
 	OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:SHKTwitterAPIUserInfoURL]
-                                                                    consumer:self.consumer
-                                                                       token:self.accessToken
+                                                                    consumer:consumer
+                                                                       token:accessToken
                                                                        realm:nil
                                                            signatureProvider:nil];	
 	[oRequest setHTTPMethod:@"GET"];
@@ -345,18 +350,19 @@
 	[fetcher start];
 }
 
-- (void)sendFileViaTwitter:(SHKFile *)file {
+- (void)sendDataViaTwitter:(NSData *)data mimeType:(NSString *)mimeType filename:(NSString *)filename {
     
     OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:SHKTwitterAPIUpdateWithMediaURL]
-                                                                    consumer:self.consumer
-                                                                       token:self.accessToken
+                                                                    consumer:consumer
+                                                                       token:accessToken
                                                                        realm:nil
                                                            signatureProvider:nil];
 	[oRequest setHTTPMethod:@"POST"];
+    [oRequest prepare];
     
 	OARequestParameter *statusParam = [[OARequestParameter alloc] initWithName:@"status" value:[self.item customValueForKey:@"status"]];
 	[oRequest setParameters:@[statusParam]];
-    [oRequest attachFile:file withParameterName:@"media"];
+    [oRequest attachFileWithParameterName:@"media" filename:filename contentType:mimeType data:data];
 	
 	OAAsynchronousDataFetcher *fetcher = [OAAsynchronousDataFetcher asynchronousFetcherWithRequest:oRequest
                                                                                           delegate:self
@@ -365,17 +371,17 @@
 	[fetcher start];
 }
 
-- (void)sendFileViaYFrog:(SHKFile *)file {
+- (void)sendDataViaYFrog:(NSData *)data mimeType:(NSString *)mimeType filename:(NSString *)filename {
     
     OAMutableURLRequest *uploadRequest = [[OAMutableURLRequest alloc] initWithURL:[[NSURL alloc] initWithString:@"https://yfrog.com/api/xauth_upload"]
-                                                                         consumer:self.consumer
-                                                                            token:self.accessToken
+                                                                         consumer:consumer
+                                                                            token:accessToken
                                                                             realm:@"https://api.twitter.com/"
-                                                                signatureProvider:self.signatureProvider];
+                                                                signatureProvider:signatureProvider];
     [uploadRequest setHTTPMethod:@"POST"];
     [uploadRequest setValue:@"https://api.twitter.com/1.1/account/verify_credentials.json" forHTTPHeaderField:@"X-Auth-Service-Provider"];
     [uploadRequest setValue:[self createOAuthHeaderForYFrog] forHTTPHeaderField:@"X-Verify-Credentials-Authorization"];
-    [uploadRequest attachFile:file withParameterName:@"media"];
+    [uploadRequest attachFileWithParameterName:@"media" filename:filename contentType:mimeType data:data];
     
     OAAsynchronousDataFetcher *fetcher = [OAAsynchronousDataFetcher asynchronousFetcherWithRequest:uploadRequest
                                                                                           delegate:self
@@ -387,10 +393,9 @@
 - (NSString *)createOAuthHeaderForYFrog {
     
     OAMutableURLRequest *auth = [[OAMutableURLRequest alloc] initWithURL:[[NSURL alloc] initWithString:@"https://api.twitter.com/1.1/account/verify_credentials.xml"]
-                                                                consumer:self.consumer
-                                                                   token:self.accessToken
+                                                                consumer:consumer token:accessToken
                                                                    realm:@"https://api.twitter.com/"
-                                                       signatureProvider:self.signatureProvider];
+                                                       signatureProvider:signatureProvider];
     [auth prepare];
     NSDictionary *headerDict = [auth allHTTPHeaderFields];
     NSString *result = [[NSString alloc] initWithString:[headerDict valueForKey:@"Authorization"]];
@@ -419,8 +424,8 @@
 - (void)sendStatus
 {
 	OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:SHKTwitterAPIUpdateURL]
-                                                                    consumer:self.consumer
-                                                                       token:self.accessToken
+                                                                    consumer:consumer
+                                                                       token:accessToken
                                                                        realm:nil
                                                            signatureProvider:nil];
 	
@@ -445,10 +450,10 @@
 	[self.item setCustomValue:nil forKey:@"followMe"];
 	
 	OAMutableURLRequest *oRequest = [[OAMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"https://api.twitter.com/1.1/friendships/create/%@.json", SHKCONFIG(twitterUsername)]]
-                                                                    consumer:self.consumer
-                                                                       token:self.accessToken
-                                                                       realm:nil
-                                                           signatureProvider:nil];
+																						 consumer:consumer
+																							 token:accessToken
+																							 realm:nil
+																			 signatureProvider:nil];
 	
 	[oRequest setHTTPMethod:@"POST"];
 	

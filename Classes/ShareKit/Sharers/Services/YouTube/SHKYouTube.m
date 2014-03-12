@@ -273,7 +273,8 @@ NSString *const kKeychainItemName = @"ShareKit: YouTube";
     ^(GTLServiceTicket *ticket, GTLYouTubeVideo *uploadedVideo, NSError *error){
         self.uploadTicket = nil;
         if (error == nil) {
-            [self sendDidFinish];
+            NSDictionary *response = @{@"id":uploadedVideo.identifier};
+            [self sendDidFinishWithResponse:response];
         } else {
             [self sendDidFailWithError:[SHK error:SHKLocalizedString(@"The service encountered an error. Please try again later.")] shouldRelogin:NO];
         }
@@ -285,7 +286,7 @@ NSString *const kKeychainItemName = @"ShareKit: YouTube";
     ^(GTLServiceTicket *ticket, unsigned long long numberOfBytesRead, unsigned long long dataLength){
         float progress = (double)numberOfBytesRead / (double)dataLength;
         if(progress < 1)
-            [self showUploadedBytes:numberOfBytesRead totalBytes:dataLength];
+            [self showProgress:progress];
         else{
             [self displayActivity:SHKLocalizedString(@"Processing Video...")];
         }

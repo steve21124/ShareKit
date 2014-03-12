@@ -27,9 +27,6 @@
 #import "OAMutableURLRequest.h"
 #import "Debug.h"
 
-#import "OARequestParameter.h"
-#import "NSURL+Base.h"
-
 
 @interface OAMutableURLRequest (Private)
 - (void)_generateTimestamp;
@@ -245,16 +242,9 @@ signatureProvider:(id<OASignatureProviding, NSObject>)aProvider
 					 [[[self URL] URLStringWithoutQuery] URLEncodedString],
 					 [normalizedRequestParameters URLEncodedString]];
 	
-	//SHKLog(@"OAMutableURLRequest parameters %@ \n signature:%@", normalizedRequestParameters, ret);
+	SHKLog(@"OAMutableURLRequest parameters %@", normalizedRequestParameters);
 	
 	return ret;
-}
-
-//not in NSMutableURLRequest category. A class should know nothing about its subclasses.
-- (void)attachFile:(SHKFile *)file withParameterName:(NSString *)name {
-    
-    [self prepare];
-    [super attachFile:file withParameterName:name];
 }
 
 @end
