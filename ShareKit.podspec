@@ -21,7 +21,7 @@ Pod::Spec.new do |s|
     core.frameworks    = 'SystemConfiguration', 'Security', 'MessageUI', "AVFoundation", "MobileCoreServices", "CoreMedia", "Social"
     core.dependency 'SSKeychain', '~> 0.2.1'
     core.dependency 'SSToolkit'
-    core.dependency 'SSToolkit/SSTextView'
+    core.dependency 'SAMTextField'
     core.dependency 'ShareKit/Reachability'
     core.dependency 'ShareKit/NoARC'
   end
